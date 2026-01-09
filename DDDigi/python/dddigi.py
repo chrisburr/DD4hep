@@ -30,10 +30,6 @@ def loadDDDigi():
     gSystem.Load("libglapi")
     ROOT.gErrorIgnoreLevel = orgLevel
 
-  import os
-  import platform
-  if platform.system() == "Darwin":
-    gSystem.SetDynamicPath(os.environ['DD4HEP_LIBRARY_PATH'])
   #
   # load with ROOT the DDDigi plugin library, which in turn loads the DDigi module
   result = gSystem.Load("libDDDigiPlugins")
