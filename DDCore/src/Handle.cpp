@@ -27,12 +27,33 @@
 #include <cxxabi.h>
 #endif
 
+#ifndef _WIN32
+#include <dlfcn.h>
+#include <filesystem>
+#endif
+
 namespace dd4hep {
   dd4hep::tools::Evaluator& evaluator();
 }
 
 namespace {
   const dd4hep::tools::Evaluator& eval(dd4hep::evaluator());
+
+#ifndef _WIN32
+  /// Auto-detect DD4hepINSTALL by finding the library location at runtime
+  std::string get_default_install_path() {
+    static const std::string path = []() {
+      Dl_info info;
+      // Use the address of a function in this library to find where it's located
+      if ( dladdr( reinterpret_cast<void*>( &dd4hep::evaluator ), &info ) && info.dli_fname ) {
+        // Library is typically in <prefix>/lib, so go up one level to get prefix
+        return std::filesystem::path( info.dli_fname ).parent_path().parent_path().string();
+      }
+      return std::string{};
+    }();
+    return path;
+  }
+#endif
 }
 
 using namespace dd4hep;
@@ -303,6 +324,17 @@ namespace dd4hep  {
       auto   ret = eval.getEnviron(v, err);
       // Checking that the variable lookup worked
       if ( ret.first != tools::Evaluator::OK) {
+#ifndef _WIN32
+        // Provide fallback for DD4hepINSTALL by auto-detecting from library location
+        if ( v == "${DD4hepINSTALL}" ) {
+          std::string default_path = get_default_install_path();
+          if ( !default_path.empty() ) {
+            processed_variable << default_path;
+            current_index = id2 + 1;
+            continue;
+          }
+        }
+#endif
         std::cerr << v << ": " << err.str() << std::endl;
         throw std::runtime_error("dd4hep: Severe error during environment lookup of " + v + " " + err.str());
       }
