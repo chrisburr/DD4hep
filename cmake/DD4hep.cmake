@@ -85,9 +85,20 @@ function(dd4hep_generate_rootmap library)
 
   set(rootmapfile ${CMAKE_SHARED_MODULE_PREFIX}${library}.components)
 
+  # On macOS, plugins using Python symbols are built with -undefined dynamic_lookup.
+  # We need to preload libpython so these symbols resolve when listcomponents loads the plugin.
+  set(_preload_env)
+  if(APPLE AND Python_LIBRARIES)
+    set(_preload_env "DYLD_INSERT_LIBRARIES=${Python_LIBRARIES}")
+  endif()
+
   add_custom_command(OUTPUT ${rootmapfile}
                      DEPENDS ${library}
-                     COMMAND ${ENV_VAR}=${${ENV_VAR}_VALUE} $<TARGET_FILE:DD4hep::listcomponents> -o ${rootmapfile} $<TARGET_FILE_NAME:${library}>
+                     VERBATIM COMMAND
+                     "${CMAKE_COMMAND}" -E env
+                     "${ENV_VAR}=${${ENV_VAR}_VALUE}"
+                     ${_preload_env}
+                     $<TARGET_FILE:DD4hep::listcomponents> -o ${rootmapfile} $<TARGET_FILE_NAME:${library}>
                      WORKING_DIRECTORY ${LIBRARY_OUTPUT_PATH}
                      )
 
