@@ -25,6 +25,7 @@
 
 #include <cxxabi.h>
 #include <sys/stat.h>
+#include <filesystem>
 
 #define REG_SCOPE_LOCK std::lock_guard<std::recursive_mutex> _guard( m_mutex );
 
@@ -103,6 +104,19 @@ namespace {
   std::string old_style_name( const std::string& name ) {
     return std::for_each( name.begin(), name.end(), OldStyleCnv() ).name;
   }
+
+  /// Get the default plugin search path by detecting the library location at runtime
+  std::string get_default_search_path() {
+    static const std::string path = []() {
+      Dl_info info;
+      // Use the address of a function in this library to find where it's located
+      if ( dladdr( reinterpret_cast<void*>( &old_style_name ), &info ) && info.dli_fname ) {
+        return std::filesystem::path( info.dli_fname ).parent_path().string();
+      }
+      return std::string{};
+    }();
+    return path;
+  }
 } // namespace
 
 namespace Gaudi {
@@ -155,9 +169,20 @@ namespace Gaudi {
           const char* envVar = "LD_LIBRARY_PATH";
           const char  sep    = ':';
 #endif
-          char* search_path = ::getenv( envVar );
           logger().debug( std::string( "searching factories in " ) + envVar );
-          std::string path = search_path ? std::string(search_path) : "/usr/lib64:/usr/lib:/usr/local/lib";
+          // Prepend the library's own directory as the default search path
+          std::string path;
+          std::string default_path = get_default_search_path();
+          if ( !default_path.empty() ) {
+            path = default_path + sep;
+          }
+          char* search_path = ::getenv( envVar );
+          if ( search_path ) {
+            path += search_path;
+          }
+          if ( path.empty() ) {
+            path = "/usr/lib64:/usr/lib:/usr/local/lib";
+          }
           std::string::size_type pos    = 0;
           std::string::size_type newpos = 0;
           while ( pos != std::string::npos ) {

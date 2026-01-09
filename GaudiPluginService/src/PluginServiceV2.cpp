@@ -92,6 +92,19 @@ namespace {
   std::string old_style_name( const std::string& name ) {
     return std::for_each( name.begin(), name.end(), OldStyleCnv() ).name;
   }
+
+  /// Get the default plugin search path by detecting the library location at runtime
+  std::string get_default_search_path() {
+    static const std::string path = []() {
+      Dl_info info;
+      // Use the address of a function in this library to find where it's located
+      if ( dladdr( reinterpret_cast<void*>( &old_style_name ), &info ) && info.dli_fname ) {
+        return fs::path( info.dli_fname ).parent_path().string();
+      }
+      return std::string{};
+    }();
+    return path;
+  }
 } // namespace
 
 namespace Gaudi {
@@ -157,8 +170,18 @@ namespace Gaudi {
           std::smatch matches;
 
           std::string search_path;
+          // Prepend the library's own directory as the default search path
+          std::string default_path = get_default_search_path();
+          if ( !default_path.empty() ) {
+            search_path = default_path + sep;
+          }
           const char* envPtr = std::getenv( envVar.c_str() );
-          search_path = envPtr ? envPtr : "/usr/lib64:/usr/lib:/usr/local/lib";
+          if ( envPtr ) {
+            search_path += envPtr;
+          }
+          if ( search_path.empty() ) {
+            search_path = "/usr/lib64:/usr/lib:/usr/local/lib";
+          }
           if ( search_path.empty() ) {
             return;
           }
